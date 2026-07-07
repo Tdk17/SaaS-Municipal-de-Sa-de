@@ -1,0 +1,6 @@
+{
+  "name": "SaaS Municipal de Saúde",
+  "description": "Plataforma completa para prefeituras e Secretarias de Saúde. Integra portal público para cidadãos com sistemas de gestão interna para médicos, dentistas, triagem, agentes de saúde e farmácia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
