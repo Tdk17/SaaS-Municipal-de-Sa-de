@@ -16,6 +16,17 @@ import Logo from './components/Logo';
 
 export default function App() {
   const [activePortal, setActivePortal] = useState<'publico' | 'interno'>('publico');
+  const [dbVersion, setDbVersion] = useState(0);
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setDbVersion(prev => prev + 1);
+    };
+    window.addEventListener('mockdb-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('mockdb-updated', handleUpdate);
+    };
+  }, []);
 
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col font-sans selection:bg-blue-500 selection:text-white" id="main-app-container">

@@ -36,6 +36,7 @@ import {
   StatusAgendamento,
   VisitaDomiciliar
 } from '../types';
+import { saveToParse, loadFromParse } from './parseSync';
 
 const STORAGE_KEY = 'saas_municipal_saude_db';
 
@@ -789,6 +790,7 @@ export class MockDb {
 
   private static saveDb(db: MockDatabase) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    saveToParse(db);
   }
 
   public static reset() {
@@ -1219,3 +1221,6 @@ export class MockDb {
     this.saveDb(db);
   }
 }
+
+// Trigger loading existing data from Back4App Parse in background on initial script load
+loadFromParse();
