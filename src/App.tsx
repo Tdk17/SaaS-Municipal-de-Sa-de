@@ -13,6 +13,7 @@ import { ShieldCheck, Heart, User, Building, Settings, Sparkles } from 'lucide-r
 import PortalPublico from './components/PortalPublico';
 import SistemaInterno from './components/SistemaInterno';
 import Logo from './components/Logo';
+import { MockDb } from './db/mockDb';
 
 export default function App() {
   const [activePortal, setActivePortal] = useState<'publico' | 'interno'>('publico');

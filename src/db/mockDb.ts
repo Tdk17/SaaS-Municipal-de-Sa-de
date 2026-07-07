@@ -751,25 +751,25 @@ const defaultDatabase: MockDatabase = {
   dentistas: seedDentistas,
   agentesSaude: seedAgentes,
   pacientes: seedPacientes,
-  agendamentos: seedAgendamentos,
-  triagens: seedTriagens,
-  prontuariosMedicos: seedProntuariosMedicos,
-  prontuariosOdontologicos: seedProntuariosOdonto,
-  odontograma: seedOdontograma,
+  agendamentos: [],
+  triagens: [],
+  prontuariosMedicos: [],
+  prontuariosOdontologicos: [],
+  odontograma: [],
   procedimentosOdontologicos: [],
-  receitas: seedReceitas,
+  receitas: [],
   medicamentos: seedMedicamentos,
   estoqueMedicamentos: seedEstoque,
   entregaMedicamentos: [],
-  exames: seedExames,
-  encaminhamentos: seedEncaminhamentos,
+  exames: [],
+  encaminhamentos: [],
   vacinas: seedVacinas,
-  carteiraVacinacao: seedCarteira,
+  carteiraVacinacao: [],
   noticias: seedNoticias,
-  campanhas: seedCampanhas,
-  notificacoes: seedNotificacoes,
-  ouvidoria: seedOuvidoria,
-  logsAuditoria: seedLogs,
+  campanhas: [],
+  notificacoes: [],
+  ouvidoria: [],
+  logsAuditoria: [],
   visitasDomiciliares: []
 };
 
@@ -795,6 +795,8 @@ export class MockDb {
 
   public static reset() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultDatabase));
+    saveToParse(defaultDatabase);
+    window.dispatchEvent(new CustomEvent('mockdb-updated'));
     return defaultDatabase;
   }
 

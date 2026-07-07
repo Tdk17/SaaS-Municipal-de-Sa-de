@@ -13,7 +13,8 @@ import {
   Ticket, 
   Download, 
   CheckCircle, 
-  Inbox 
+  Inbox,
+  PlusCircle
 } from 'lucide-react';
 import { MockDb } from '../db/mockDb';
 import { Agendamento, Receita, Exame, CarteiraVacinacao, Vacina } from '../types';
@@ -47,17 +48,138 @@ const getVacinasPaciente = (pacienteId: string): VacinaTomada[] => {
 };
 
 export default function PacientePanel({ onLogout, usuarioNome }: PacientePanelProps) {
-  const [pacTab, setPacTab] = useState<'dados' | 'agenda' | 'receitas' | 'exames' | 'vacinas' | 'senha'>('agenda');
+  const [pacTab, setPacTab] = useState<'dados' | 'agenda' | 'marcar' | 'receitas' | 'exames' | 'vacinas' | 'senha'>('agenda');
   
   // Hardcoded patient for this role: "Ana Maria da Silva" (pac-1)
   const pacienteId = 'pac-1';
 
   // DB States
   const [paciente] = useState(() => MockDb.getPacientes().find(p => p.id === pacienteId));
-  const [agendamentos] = useState<Agendamento[]>(() => MockDb.getAgendamentos().filter(a => a.pacienteId === pacienteId));
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => MockDb.getAgendamentos().filter(a => a.pacienteId === pacienteId));
   const [receitas] = useState<Receita[]>(() => MockDb.getReceitas().filter(r => r.pacienteId === pacienteId));
   const [exames] = useState<Exame[]>(() => MockDb.getExames().filter(e => e.pacienteId === pacienteId));
   const [vacinas] = useState<VacinaTomada[]>(() => getVacinasPaciente(pacienteId));
+
+  // Scheduling form states
+  const [selectedProfType, setSelectedProfType] = useState<'medico' | 'dentista'>('medico');
+  const [selectedProfId, setSelectedProfId] = useState<string>('med-1');
+  const [tipoAtendimento, setTipoAtendimento] = useState<'consulta_medica' | 'consulta_odontologica' | 'retorno' | 'renovacao_receita'>('consulta_medica');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [observacao, setObservacao] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [successMsg, setSuccessMsg] = useState<string>('');
+
+  const getAppointmentDuration = (tipo: string): number => {
+    return tipo === 'renovacao_receita' ? 15 : 30;
+  };
+
+  const parseTimeToMinutes = (timeStr: string): number => {
+    const [hh, mm] = timeStr.split(':').map(Number);
+    return hh * 60 + mm;
+  };
+
+  const formatMinutesToTime = (totalMin: number): string => {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  const timeSlots = [
+    '08:00', '08:15', '08:30', '08:45',
+    '09:00', '09:15', '09:30', '09:45',
+    '10:00', '10:15', '10:30', '10:45',
+    '11:00', '11:15', '11:30', '11:45',
+    '13:00', '13:15', '13:30', '13:45',
+    '14:00', '14:15', '14:30', '14:45',
+    '15:00', '15:15', '15:30', '15:45',
+    '16:00', '16:15', '16:30', '16:45'
+  ];
+
+  const isSlotAvailable = (timeStr: string) => {
+    if (!selectedDate || !selectedProfId) return true;
+    
+    const startNew = parseTimeToMinutes(timeStr);
+    const durationNew = getAppointmentDuration(tipoAtendimento);
+    const endNew = startNew + durationNew;
+    
+    const existing = MockDb.getAgendamentos().filter(
+      a => a.profissionalId === selectedProfId && 
+           a.data === selectedDate && 
+           a.status !== 'cancelado'
+    );
+    
+    return !existing.some(a => {
+      const startExt = parseTimeToMinutes(a.horario);
+      const durationExt = getAppointmentDuration(a.tipoAtendimento);
+      const endExt = startExt + durationExt;
+      return startNew < endExt && startExt < endNew;
+    });
+  };
+
+  const handleSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedDate || !selectedTime || !selectedProfId) {
+      setErrorMsg("Por favor, selecione uma data e um horário disponível.");
+      return;
+    }
+    
+    const startNew = parseTimeToMinutes(selectedTime);
+    const durationNew = getAppointmentDuration(tipoAtendimento);
+    const endNew = startNew + durationNew;
+    
+    // Check conflicts
+    const existing = MockDb.getAgendamentos().filter(
+      a => a.profissionalId === selectedProfId && 
+           a.data === selectedDate && 
+           a.status !== 'cancelado'
+    );
+    
+    const conflict = existing.find(a => {
+      const startExt = parseTimeToMinutes(a.horario);
+      const durationExt = getAppointmentDuration(a.tipoAtendimento);
+      const endExt = startExt + durationExt;
+      return startNew < endExt && startExt < endNew;
+    });
+    
+    if (conflict) {
+      const durationConf = getAppointmentDuration(conflict.tipoAtendimento);
+      setErrorMsg(`Horário ocupado! Conflito com agendamento das ${conflict.horario} às ${formatMinutesToTime(parseTimeToMinutes(conflict.horario) + durationConf)}.`);
+      return;
+    }
+    
+    const newAppointment: any = {
+      id: `agenda-${Date.now()}`,
+      municipioId: 'mun-1',
+      unidadeId: 'unit-1',
+      pacienteId: pacienteId,
+      profissionalId: selectedProfId,
+      tipoProfissional: selectedProfType,
+      tipoAtendimento: tipoAtendimento,
+      data: selectedDate,
+      horario: selectedTime,
+      status: 'agendado',
+      prioridade: 'normal',
+      observacao: observacao || (tipoAtendimento === 'renovacao_receita' ? 'Renovação de receita de uso contínuo.' : 'Consulta de rotina.')
+    };
+    
+    MockDb.addAgendamento(newAppointment);
+    
+    // Refresh local list of agendamentos
+    setAgendamentos(MockDb.getAgendamentos().filter(a => a.pacienteId === pacienteId));
+    setSuccessMsg("✓ Consulta agendada com sucesso!");
+    setErrorMsg("");
+    
+    // Clean up
+    setObservacao("");
+    setSelectedTime("");
+    
+    setTimeout(() => {
+      setPacTab('agenda');
+      setSuccessMsg("");
+    }, 2000);
+  };
 
   // Virtual ticket details: count how many people in same queue have lower queue numbers
   const todayMeeting = agendamentos.find(a => a.status === 'em_triagem' || a.status === 'confirmado' || a.status === 'agendado');
@@ -86,6 +208,13 @@ export default function PacientePanel({ onLogout, usuarioNome }: PacientePanelPr
               {todayMeeting && (
                 <span className="ml-auto w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping shrink-0"></span>
               )}
+            </button>
+            <button
+              onClick={() => setPacTab('marcar')}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${pacTab === 'marcar' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'}`}
+            >
+              <PlusCircle className="w-4 h-4" />
+              Marcar Consulta
             </button>
             <button
               onClick={() => setPacTab('receitas')}
@@ -179,6 +308,194 @@ export default function PacientePanel({ onLogout, usuarioNome }: PacientePanelPr
                   <p className="p-8 text-center text-slate-400">Você não possui nenhum agendamento pendente no momento.</p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== SUB-TAB: MARCAR CONSULTA ==================== */}
+        {pacTab === 'marcar' && (
+          <div className="space-y-6 text-xs max-w-3xl">
+            <div className="border-b border-slate-200 pb-3">
+              <h1 className="text-2xl font-black text-slate-900">Agendar Consulta</h1>
+              <p className="text-sm text-slate-500">
+                Escolha a especialidade, a data e selecione um dos horários disponíveis. 
+                O sistema controla automaticamente intervalos de <strong>30 minutos</strong> para consultas normais e <strong>15 minutos</strong> para renovação de receitas.
+              </p>
+            </div>
+
+            {errorMsg && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-4 rounded-lg font-bold">
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs p-4 rounded-lg font-bold">
+                ✓ {successMsg}
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <form onSubmit={handleSchedule} className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Tipo de Profissional</label>
+                    <select
+                      value={selectedProfType}
+                      onChange={(e) => {
+                        const val = e.target.value as 'medico' | 'dentista';
+                        setSelectedProfType(val);
+                        setSelectedProfId(val === 'medico' ? 'med-1' : 'dent-1');
+                        setTipoAtendimento(val === 'medico' ? 'consulta_medica' : 'consulta_odontologica');
+                        setSelectedTime('');
+                        setErrorMsg('');
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded p-2.5 focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                    >
+                      <option value="medico">Médico Clínico Geral</option>
+                      <option value="dentista">Dentista / Odontologia</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Profissional Selecionado</label>
+                    <select
+                      value={selectedProfId}
+                      onChange={(e) => {
+                        setSelectedProfId(e.target.value);
+                        setSelectedTime('');
+                        setErrorMsg('');
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded p-2.5 focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                    >
+                      {selectedProfType === 'medico' ? (
+                        <option value="med-1">Dr. Roberto Cavalcanti (CRM/PR 45213) - UBS Central</option>
+                      ) : (
+                        <option value="dent-1">Dra. Beatriz Santos (CRO/PR 12984) - UBS Central</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Finalidade do Atendimento</label>
+                    <select
+                      value={tipoAtendimento}
+                      onChange={(e: any) => {
+                        setTipoAtendimento(e.target.value);
+                        setSelectedTime('');
+                        setErrorMsg('');
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded p-2.5 focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                    >
+                      {selectedProfType === 'medico' ? (
+                        <>
+                          <option value="consulta_medica">Consulta Médica Geral (30 min)</option>
+                          <option value="retorno">Retorno de Consulta (30 min)</option>
+                          <option value="renovacao_receita">Renovação de Receita de Uso Contínuo (15 min)</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="consulta_odontologica">Consulta Odontológica Geral (30 min)</option>
+                          <option value="retorno">Retorno Odontológico (30 min)</option>
+                          <option value="renovacao_receita">Renovação de Receita / Acompanhamento (15 min)</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Data da Consulta</label>
+                    <input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setSelectedTime('');
+                        setErrorMsg('');
+                      }}
+                      required
+                      className="w-full bg-slate-50 border border-slate-300 rounded p-2 focus:outline-none focus:border-emerald-500 text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 block">Observação / Sintomas</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Escreva brevemente o motivo da consulta ou os medicamentos de uso contínuo que deseja renovar..."
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded p-2 focus:outline-none focus:border-emerald-500 text-xs font-medium"
+                  />
+                </div>
+
+                {selectedDate && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-1">
+                      <label className="font-black text-slate-900 text-xs block">
+                        Horários Disponíveis para o dia {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        Duração: {getAppointmentDuration(tipoAtendimento)} minutos
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                      {timeSlots.map((time) => {
+                        const available = isSlotAvailable(time);
+                        const isSelected = selectedTime === time;
+
+                        return (
+                          <button
+                            key={time}
+                            type="button"
+                            disabled={!available}
+                            onClick={() => {
+                              setSelectedTime(time);
+                              setErrorMsg('');
+                            }}
+                            className={`py-2 px-1 text-center font-mono font-bold text-xs rounded-lg border transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-500/20 scale-[1.02]'
+                                : available
+                                ? 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:border-slate-300 border-slate-200'
+                                : 'bg-rose-50/40 text-slate-300 border-rose-100/40 line-through cursor-not-allowed'
+                            }`}
+                            title={available ? `Disponível (${getAppointmentDuration(tipoAtendimento)} min)` : 'Indisponível (Conflito de Horário)'}
+                          >
+                            {time}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t border-slate-100 pt-4 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPacTab('agenda')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded text-xs transition cursor-pointer border border-slate-200"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!selectedDate || !selectedTime}
+                    className={`px-6 py-2 rounded text-xs font-black shadow-sm transition ${
+                      selectedDate && selectedTime
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Confirmar Agendamento
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

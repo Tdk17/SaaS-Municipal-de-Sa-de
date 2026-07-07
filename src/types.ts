@@ -160,7 +160,8 @@ export type TipoAtendimento =
   | 'urgencia'
   | 'triagem'
   | 'exame'
-  | 'vacina';
+  | 'vacina'
+  | 'renovacao_receita';
 
 export type StatusAgendamento = 'agendado' | 'confirmado' | 'em_triagem' | 'em_atendimento' | 'atendido' | 'cancelado' | 'ausente';
 
